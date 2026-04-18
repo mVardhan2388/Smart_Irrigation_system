@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Smart Irrigation Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body {
+    margin: 0;
+    font-family: 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg, #1e3c72, #2a5298);
+    color: white;
+    text-align: center;
+}
+
+h1 {
+    margin: 20px 0;
+}
+
+.section-title {
+    margin-top: 20px;
+    font-size: 1.4em;
+    font-weight: bold;
+}
+
+.container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 15px;
+    padding: 20px;
+}
+
+.card {
+    background: rgba(255,255,255,0.1);
+    border-radius: 18px;
+    padding: 20px;
+    backdrop-filter: blur(10px);
+    transition: 0.3s;
+}
+
+.card:hover {
+    transform: scale(1.05);
+    background: rgba(255,255,255,0.2);
+}
+
+.value {
+    font-size: 1.8em;
+    margin-top: 10px;
+}
+
+.status {
+    margin: 20px;
+    font-size: 1.4em;
+    font-weight: bold;
+}
+
+.on {
+    color: #00ff9d;
+}
+
+.off {
+    color: #ff4d4d;
+}
+</style>
+</head>
+
+<body>
+
+<h1>🌱 Smart Irrigation Dashboard</h1>
+
+<!-- WEATHER -->
+<div class="section-title">🌦 Weather Forecast</div>
+<div class="container">
+    <div class="card">
+        <div>🌡 Temperature</div>
+        <div id="w_temp" class="value">--</div>
+    </div>
+    <div class="card">
+        <div>💧 Humidity</div>
+        <div id="w_hum" class="value">--</div>
+    </div>
+    <div class="card">
+        <div>🌬 Pressure</div>
+        <div id="w_pres" class="value">--</div>
+    </div>
+    <div class="card">
+        <div>🌧 Rain Probability</div>
+        <div id="w_rain" class="value">--</div>
+    </div>
+</div>
+
+<!-- SENSOR DATA -->
+<div class="section-title">📡 ESP32 Sensor Data</div>
+<div class="container">
+    <div class="card">
+        <div>🌡 DHT Temperature</div>
+        <div id="s_temp" class="value">--</div>
+    </div>
+    <div class="card">
+        <div>💧 DHT Humidity</div>
+        <div id="s_hum" class="value">--</div>
+    </div>
+    <div class="card">
+        <div>🌱 Soil Moisture</div>
+        <div id="soil" class="value">--</div>
+    </div>
+</div>
+
+<!-- DECISION -->
+<div class="status" id="decision">Analyzing...</div>
+<div class="status" id="pumpStatus">Pump: --</div>
+
+<script>
+
+const weatherChannel = "3319454";
+const espChannel = "3329419";
+
+const weatherURL = `https://api.thingspeak.com/channels/${weatherChannel}/feeds.json?results=1`;
+const espURL = `https://api.thingspeak.com/channels/${espChannel}/feeds.json?results=1`;
+
+async function fetchData() {
+
+    try {
+        const weatherRes = await fetch(weatherURL);
+        const weatherData = await weatherRes.json();
+
+        const espRes = await fetch(espURL);
+        const espData = await espRes.json();
+
+        let w = weatherData.feeds[0];
+        let s = espData.feeds[0];
+
+        // WEATHER UI
+        document.getElementById("w_temp").innerText = w.field1 + " °C";
+        document.getElementById("w_hum").innerText  = w.field2 + " %";
+        document.getElementById("w_pres").innerText = w.field3 + " hPa";
+        document.getElementById("w_rain").innerText = w.field4 + " %";
+
+        // SENSOR UI
+        document.getElementById("s_temp").innerText = s.field1 + " °C";
+        document.getElementById("s_hum").innerText  = s.field2 + " %";
+        document.getElementById("soil").innerText   = s.field3;
+
+        // PARSE VALUES
+        let rainProb = parseFloat(w.field4);
+        let soil = parseInt(s.field3);
+
+        updateDecision(rainProb, soil);
+
+    } catch (error) {
+        console.log("Error fetching data:", error);
+    }
+}
+
+
+// DECISION FUNCTION
+function updateDecision(rainProb, soil) {
+
+    if (isNaN(rainProb) || isNaN(soil)) return;
+
+    let decisionText = document.getElementById("decision");
+    let pumpText = document.getElementById("pumpStatus");
+
+    let soilThreshold = 2000;
+
+    if (soil > soilThreshold && rainProb < 50) {
+        decisionText.innerText = "🌵 Dry soil & Low rain → Irrigation Required";
+        decisionText.className = "status on";
+
+        pumpText.innerText = "🚰 Pump: ON";
+        pumpText.className = "status on";
+    } else {
+        decisionText.innerText = "🌧 Enough moisture OR Rain expected → No Irrigation";
+        decisionText.className = "status off";
+
+        pumpText.innerText = "🚰 Pump: OFF";
+        pumpText.className = "status off";
+    }
+}
+
+fetchData();
+setInterval(fetchData, 20000);
+
+</script>
+
+</body>
+</html>
